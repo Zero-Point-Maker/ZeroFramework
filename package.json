@@ -1,0 +1,22 @@
+{
+  "name": "com.zero.framework",
+  "version": "1.0.0",
+  "displayName": "ZeroFramework",
+  "description": "Modular Unity Framework - 模块化 Unity 框架",
+  "unity": "2022.3",
+  "author": "Zero-Point-Maker",
+  "license": "MIT",
+  "keywords": [
+    "framework",
+    "modular",
+    "architecture",
+    "mvc",
+    "ecs",
+    "Unity"
+  ],
+  "category": "Framework",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Zero-Point-Maker/ZeroFramework"
+  }
+}
