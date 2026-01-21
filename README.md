@@ -1,8 +1,15 @@
-# ZeroFramework 
+# <h1 align="center">Zero Framework</h1>
+
+[![License](https://img.shields.io/github/license/Zero-Point-Maker/ZeroFramework?style=flat-square)](LICENSE)
+[![Last Commit](https://img.shields.io/github/last-commit/Zero-Point-Maker/ZeroFramework?style=flat-square)](https://github.com/Zero-Point-Maker/ZeroFramework)
+[![Issues](https://img.shields.io/github/issues/Zero-Point-Maker/ZeroFramework?style=flat-square)](https://github.com/Zero-Point-Maker/ZeroFramework/issues)
+[![Top Language](https://img.shields.io/github/languages/top/Zero-Point-Maker/ZeroFramework?style=flat-square)](https://github.com/Zero-Point-Maker/ZeroFramework)
 
 ## 🎯 框架简介
 
 ZeroFramework (简称 ZF) 是一个高度模块化的 Unity 游戏框架，核心优势是**模块可拆卸**，允许开发者根据项目需求灵活选择和组合模块，实现真正的按需使用。
+
+[中文]()|[English](README_EN.md)
 
 ## ✨ 核心特性
 
