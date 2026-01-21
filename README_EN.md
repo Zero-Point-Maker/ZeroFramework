@@ -1,8 +1,15 @@
-# ZeroFramework 
+# <h1 align="center">Zero Framework</h1>
+
+[![License](https://img.shields.io/github/license/Zero-Point-Maker/ZeroFramework?style=flat-square)](LICENSE)
+[![Last Commit](https://img.shields.io/github/last-commit/Zero-Point-Maker/ZeroFramework?style=flat-square)](https://github.com/Zero-Point-Maker/ZeroFramework)
+[![Issues](https://img.shields.io/github/issues/Zero-Point-Maker/ZeroFramework?style=flat-square)](https://github.com/Zero-Point-Maker/ZeroFramework/issues)
+[![Top Language](https://img.shields.io/github/languages/top/Zero-Point-Maker/ZeroFramework?style=flat-square)](https://github.com/Zero-Point-Maker/ZeroFramework)
 
 ## 🎯 Framework Introduction
 
 ZeroFramework (ZF for short) is a highly modular Unity game framework, with its core advantage being **detachable modules**, allowing developers to flexibly select and combine modules according to project requirements, achieving true on-demand usage.
+
+[中文](README)|[English](README_EN.md)
 
 ## ✨ Core Features
 
