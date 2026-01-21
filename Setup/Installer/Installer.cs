@@ -23,6 +23,7 @@ namespace ZF.Setup.Installer
 
         #region 常量与字段
         private const string TEMP_PATH = "Assets/ZF/Setup/temp";    // 临时文件目录
+        private const string FILE_CATALOG = "ModuleCatalog";    // 模块目录
         private static SerializableConfig _config; // 配置
         private static Dictionary<int, Module> _modules;   // 模块id->模块
         private static Dictionary<(string, ModuleTypeComponent), ModuleComponent> _components; // (模块名,组件类型)->组件
@@ -78,13 +79,22 @@ namespace ZF.Setup.Installer
         #region 模块管理
         private static void LoadModules()
         {
-            // 读取目录文件
+            /*// 读取目录文件
             string binPath = Path.Combine(Application.dataPath, "ZF/Setup/bin/ModuleCatalog.bin");
             if (File.Exists(binPath))
             {
                 using FileStream fileStream = File.OpenRead(binPath);
                 BinaryFormatter formatter = new BinaryFormatter();
                 _config = (SerializableConfig)formatter.Deserialize(fileStream);
+            }*/
+            
+            // 读取目录文件
+            TextAsset catalogAsset = Resources.Load<TextAsset>(FILE_CATALOG);
+            if (catalogAsset != null)
+            {
+                using MemoryStream memoryStream = new MemoryStream(catalogAsset.bytes);
+                BinaryFormatter formatter = new BinaryFormatter();
+                _config = (SerializableConfig)formatter.Deserialize(memoryStream);
             }
             
             if (_config == null) 
@@ -96,17 +106,27 @@ namespace ZF.Setup.Installer
             // 读取配置文件
             foreach (var (type, list) in _config.modules)
             {
-                string binFilePath = Path.Combine(Application.dataPath, $"ZF/Setup/bin/{type}.bin");
-                if (!File.Exists(binFilePath))
+                //string binFilePath = Path.Combine(Application.dataPath, $"ZF/Setup/bin/{type}.bin");
+                /*if (!File.Exists(binFilePath))
                 {
                     LogError($"未找到 {type} 类型的 bin 文件：{binFilePath}");
                     continue;
-                }
+                }*/
 
+                TextAsset moduleAsset = Resources.Load<TextAsset>($"{type}");
+                if (moduleAsset == null)
+                {
+                    LogWarning($"未找到 {type} 类型的资源文件");
+                    continue;
+                }
+                
                 try
                 {
-                    using FileStream fileStream = File.OpenRead(binFilePath);
-                    using BinaryReader reader = new BinaryReader(fileStream);
+                    /*using FileStream fileStream = File.OpenRead(binFilePath);
+                    using BinaryReader reader = new BinaryReader(fileStream);*/
+                    
+                    using MemoryStream memoryStream = new MemoryStream(moduleAsset.bytes);
+                    using BinaryReader reader = new BinaryReader(memoryStream);                    
                     
                     ModuleTypeInfo info = default;
                     info.version = reader.ReadInt64();
@@ -138,7 +158,8 @@ namespace ZF.Setup.Installer
                     foreach (ModuleIndex index in info.indexes)
                     {
                         // 定位到数据位置
-                        fileStream.Seek(index.offset, SeekOrigin.Begin);
+                        //fileStream.Seek(index.offset, SeekOrigin.Begin);
+                        memoryStream.Seek(index.offset, SeekOrigin.Begin);
                         // 读取数据
                         byte[] data = reader.ReadBytes(index.size);
                         info.data.Add(index.name, data);
