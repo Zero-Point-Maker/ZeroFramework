@@ -381,6 +381,49 @@ namespace ZF.Setup.Installer
             }
         }
 
+        public static async Task InstallAll(Action<int, int> onProgress = null, Action onComplete = null)
+        {
+            if (_config == null || _config.modules == null)
+            {
+                onComplete?.Invoke();
+                return;
+            }
+
+            int totalModules = 0;
+            int installedModules = 0;
+
+            foreach (var moduleList in _config.modules.Values)
+            {
+                foreach (var module in moduleList)
+                {
+                    foreach (var (typeComponent, component) in module.components)
+                    {
+                        totalModules++;
+                    }
+                }
+            }
+
+            foreach (var (type, moduleList) in _config.modules)
+            {
+                foreach (var module in moduleList)
+                {
+                    foreach (var (typeComponent, component) in module.components)
+                    {
+                        bool isAdded = _addedComponent.GetValueOrDefault((module.name, typeComponent));
+                        if (!isAdded)
+                        {
+                            await Install(type, module.name, typeComponent, component);
+                            installedModules++;
+                            onProgress?.Invoke(installedModules, totalModules);
+                        }
+                    }
+                }
+            }
+
+            CheckAdded();
+            onComplete?.Invoke();
+        }
+
         public static void Uninstall(ModuleType type, string moduleName, ModuleTypeComponent typeComponent)
         {
             if (_infos.TryGetValue(type, out var info))

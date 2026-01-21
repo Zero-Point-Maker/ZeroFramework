@@ -10,15 +10,18 @@ namespace ZF.Setup.Installer
     public class InstallerWindow : EditorWindow
     {
         #region 常量与字段
-        private Vector2 _scrollPosition;    // 滚动条位置
-        private Vector2 _toolsScrollPosition;   // Tools列滚动条位置
+
+        private Vector2 _scrollPosition; // 滚动条位置
+        private Vector2 _toolsScrollPosition; // Tools列滚动条位置
         private GUIContent _refreshBtn; // 刷新按钮样式
-        private GUIStyle _refreshBtnStyle;  // 刷新按钮样式
-        private readonly Dictionary<int, bool> _showModules = new();        // 模块id->是否显示
-        private readonly Dictionary<ModuleType, bool> _showTypes = new();   // 模块类型->是否显示
+        private GUIStyle _refreshBtnStyle; // 刷新按钮样式
+        private readonly Dictionary<int, bool> _showModules = new(); // 模块id->是否显示
+        private readonly Dictionary<ModuleType, bool> _showTypes = new(); // 模块类型->是否显示
+
         #endregion
 
         #region 窗口管理
+
         [MenuItem("ZF/Setup/Installer", false, 2)]
         public static void ShowWindow()
         {
@@ -28,7 +31,7 @@ namespace ZF.Setup.Installer
         private void OnEnable()
         {
             Installer.Initialize();
-            
+
             // 只初始化尚未添加的模块类型，保留已有类型的折叠状态
             foreach (ModuleType type in Enum.GetValues(typeof(ModuleType)))
             {
@@ -63,11 +66,13 @@ namespace ZF.Setup.Installer
                     return "第三方插件";
                 default:
                     throw new ArgumentOutOfRangeException(nameof(type), type, null);
-            }   
+            }
         }
+
         #endregion
 
         #region GUI绘制
+
         private void OnGUI()
         {
             using (new EditorGUILayout.VerticalScope(GUILayout.ExpandWidth(true)))
@@ -91,7 +96,7 @@ namespace ZF.Setup.Installer
                 }
             }
         }
-        
+
         private void DrawTitle()
         {
             using (new GUILayout.HorizontalScope())
@@ -113,11 +118,31 @@ namespace ZF.Setup.Installer
             {
                 GUILayout.Label("Modules", new GUIStyle(EditorStyles.boldLabel) { fontSize = 16 });
 
+                if (GUILayout.Button("全部安装", GUILayout.Height(23), GUILayout.Width(115)))
+                {
+                    if (EditorUtility.DisplayDialog("确认", "确定要安装所有未安装的模块吗？", "确定", "取消"))
+                    {
+                        _ = Installer.InstallAll(
+                            (current, total) =>
+                            {
+                                EditorUtility.DisplayProgressBar("正在安装模块", $"正在安装: {current}/{total}",
+                                    (float)current / total);
+                            },
+                            () =>
+                            {
+                                EditorUtility.ClearProgressBar();
+                                AssetDatabase.Refresh();
+                            });
+                    }
+                }
+
+                GUILayout.Space(10);
+
                 _refreshBtn ??= new GUIContent(EditorGUIUtility.IconContent("Refresh"))
                 {
                     tooltip = "Refresh modules and tools."
                 };
-                
+
                 _refreshBtnStyle ??= new GUIStyle("Command")
                 {
                     fontSize = 16,
@@ -134,8 +159,9 @@ namespace ZF.Setup.Installer
             }
 
             GUILayout.Space(10);
-            _scrollPosition = EditorGUILayout.BeginScrollView(_scrollPosition, GUILayout.ExpandWidth(true), GUILayout.ExpandHeight(true));
-            
+            _scrollPosition = EditorGUILayout.BeginScrollView(_scrollPosition, GUILayout.ExpandWidth(true),
+                GUILayout.ExpandHeight(true));
+
             if (Installer.Config != null)
             {
                 foreach (ModuleType type in Enum.GetValues(typeof(ModuleType)))
@@ -170,13 +196,13 @@ namespace ZF.Setup.Installer
         private void DrawSubModulesByType(ModuleType type)
         {
             var list = Installer.Config.modules.GetValueOrDefault(type);
-            
+
             foreach (var module in list)
             {
                 using (new GUILayout.VerticalScope(EditorStyles.helpBox))
                 {
                     bool showModule = _showModules.GetValueOrDefault(module.id);
-                    _showModules[module.id] = 
+                    _showModules[module.id] =
                         EditorGUILayout.Foldout(showModule, $"{module.name}",
                             new GUIStyle(EditorStyles.foldout)
                                 { normal = { textColor = new Color(1, .5f, 0) } });
@@ -188,10 +214,12 @@ namespace ZF.Setup.Installer
                         {
                             EditorGUILayout.LabelField($"备注：{module.footnote}");
                         }
+
                         EditorGUILayout.LabelField("组件");
                         _ = DrawSubModuleComponents(type, module);
                     }
                 }
+
                 GUILayout.Space(5);
             }
         }
@@ -218,7 +246,8 @@ namespace ZF.Setup.Installer
                             }
                             else
                             {
-                                await Installer.Install(type, module.name, typeComponent, component, AssetDatabase.Refresh);
+                                await Installer.Install(type, module.name, typeComponent, component,
+                                    AssetDatabase.Refresh);
                             }
                         }
                     }
@@ -230,7 +259,7 @@ namespace ZF.Setup.Installer
                     if (component.dependOnRegistry) DrawSubRegistries(component.dependencyRegistries);
                     if (component.dependOnScopedRegistries) DrawSubScopedRegistries(component.scopedRegistries);
                     DrawSubPath(component.path);
-                    
+
                     EditorGUI.indentLevel--;
                 }
             }
@@ -270,6 +299,7 @@ namespace ZF.Setup.Installer
                         new GUIStyle(EditorStyles.label)
                             { normal = { textColor = hasUrl ? Color.green : Color.red } });
                 }
+
                 EditorGUI.indentLevel--;
             }
         }
@@ -287,6 +317,7 @@ namespace ZF.Setup.Installer
                         new GUIStyle(EditorStyles.label)
                             { normal = { textColor = hasRegistry ? Color.green : Color.red } });
                 }
+
                 EditorGUI.indentLevel--;
             }
         }
@@ -307,8 +338,10 @@ namespace ZF.Setup.Installer
                         message += $"scope\t{scope}";
                         if (!last) message += "\n";
                     }
+
                     EditorGUILayout.HelpBox(message, hasRegistry ? MessageType.Info : MessageType.Warning);
                 }
+
                 EditorGUI.indentLevel--;
             }
         }
@@ -323,6 +356,7 @@ namespace ZF.Setup.Installer
                 {
                     EditorGUILayout.LabelField(path);
                 }
+
                 EditorGUI.indentLevel--;
             }
         }
@@ -331,9 +365,10 @@ namespace ZF.Setup.Installer
         {
             GUILayout.Label("Tools", new GUIStyle(EditorStyles.boldLabel) { fontSize = 16 });
             GUILayout.Space(10);
-            
-            _toolsScrollPosition = EditorGUILayout.BeginScrollView(_toolsScrollPosition, GUILayout.ExpandWidth(true), GUILayout.ExpandHeight(true));
-            
+
+            _toolsScrollPosition = EditorGUILayout.BeginScrollView(_toolsScrollPosition, GUILayout.ExpandWidth(true),
+                GUILayout.ExpandHeight(true));
+
             if (Installer.Config == null || Installer.Config.tools == null || Installer.Config.tools.Count == 0)
             {
                 GUILayout.Label("No tools available");
@@ -346,13 +381,14 @@ namespace ZF.Setup.Installer
                     {
                         GUILayout.Label(tool.name,
                             new GUIStyle(EditorStyles.boldLabel) { normal = { textColor = Color.cyan } });
-                        
+
                         // 允许用户复制URL
                         using (new EditorGUILayout.HorizontalScope())
                         {
                             // 使用TextField显示URL，允许用户选中复制
-                            EditorGUILayout.TextField(tool.url, EditorStyles.label, GUILayout.ExpandWidth(true), GUILayout.Height(20));
-                            
+                            EditorGUILayout.TextField(tool.url, EditorStyles.label, GUILayout.ExpandWidth(true),
+                                GUILayout.Height(20));
+
                             // 添加复制按钮
                             if (GUILayout.Button("复制", GUILayout.Width(50)))
                             {
@@ -361,12 +397,14 @@ namespace ZF.Setup.Installer
                             }
                         }
                     }
+
                     GUILayout.Space(5);
                 }
             }
-            
+
             EditorGUILayout.EndScrollView();
         }
+
         #endregion
     }
 }
