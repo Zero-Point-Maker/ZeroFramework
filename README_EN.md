@@ -9,7 +9,7 @@
 
 ZeroFramework (ZF for short) is a highly modular Unity game framework, with its core advantage being **detachable modules**, allowing developers to flexibly select and combine modules according to project requirements, achieving true on-demand usage.
 
-[中文](README)|[English](README_EN.md)
+[中文](README.md)|[English](README_EN.md)
 
 ## ✨ Core Features
 
