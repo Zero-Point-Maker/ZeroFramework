@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading.Tasks;
 using UnityEditor;
 using UnityEditor.PackageManager;
 using UnityEditor.PackageManager.Requests;
@@ -37,16 +38,16 @@ namespace ZF.Setup.Installer
             return false;
         }
 
-        public static IEnumerator AddGitPackage(string gitUrl)
+        public static async Task AddGitPackage(string gitUrl)
         {
             if (string.IsNullOrEmpty(gitUrl) ||
                 (!gitUrl.StartsWith("https://") && !gitUrl.StartsWith("git@") && !gitUrl.StartsWith("git+")))
             {
                 Debug.LogError("无效的 Git URL 格式");
-                yield break;
+                return;
             }
             
-            yield return AddPackageCoroutine(gitUrl);
+            await AddPackage(gitUrl);
         }
 
         public static bool CheckRegistryAdded(string name)
@@ -58,9 +59,9 @@ namespace ZF.Setup.Installer
             return content.Contains(name);
         }
 
-        public static IEnumerator AddRegistry(string name)
+        public static async Task AddRegistry(string name)
         {
-            yield return AddPackageCoroutine(name);
+            await AddPackage(name);
         }
 
         public static bool CheckScopedRegistryAdded(string name, string url)
@@ -72,22 +73,22 @@ namespace ZF.Setup.Installer
             return content.Contains(name) && content.Contains(url);
         }
 
-        public static IEnumerator AddScopedRegistry(string name, string url, List<string> scopes)
+        public static async Task AddScopedRegistry(string name, string url, List<string> scopes)
         {
             if (!File.Exists(ManifestPath))
             {
                 Debug.LogError("未找到 Packages/manifest.json 文件");
-                yield break;
+                return;
             }
 
             // 检查是否已存在
             if (CheckScopedRegistryAdded(name, url))
             {
                 Debug.LogWarning($"ScopedRegistry 已存在：{name}");
-                yield break;
+                return;
             }
 
-            string content = File.ReadAllText(ManifestPath);
+            string content = await File.ReadAllTextAsync(ManifestPath);
             string updatedContent = "";
 
             // 1. 生成新 Registry 的 JSON 字符串
@@ -111,7 +112,7 @@ namespace ZF.Setup.Installer
                 if (dependenciesEnd == -1)
                 {
                     Debug.LogError("无法找到 dependencies 字段");
-                    yield break;
+                    return;
                 }
 
                 // 构建完整的 scopedRegistries 字段
@@ -126,7 +127,7 @@ namespace ZF.Setup.Installer
                 if (arrayEnd == -1)
                 {
                     Debug.LogError("无法解析 scopedRegistries 数组");
-                    yield break;
+                    return;
                 }
 
                 // 检查数组是否为空
@@ -146,12 +147,12 @@ namespace ZF.Setup.Installer
             }
 
             // 3. 保存文件
-            File.WriteAllText(ManifestPath, updatedContent);
+            await File.WriteAllTextAsync(ManifestPath, updatedContent);
             Debug.Log($"成功添加 ScopedRegistry：{name}");
 
             foreach (var scope in scopes)
             {
-                yield return AddPackageCoroutine(scope);
+                await AddPackage(scope);
             }
 
             Client.Resolve();
@@ -159,36 +160,7 @@ namespace ZF.Setup.Installer
 
         #region 辅助方法
 
-        private static IEnumerator AddPackageCoroutine(string address)
-        {
-            // 异步添加包
-            AddRequest request = Client.Add(address);
-            
-            float progress = 0f;
-            float simulatedProgressIncrement = 0.01f;
-            
-            while (!request.IsCompleted)
-            {
-                progress = Mathf.Min(progress + simulatedProgressIncrement, 0.99f);
-                EditorUtility.DisplayProgressBar("添加包", $"正在添加: {address}", progress);
-                yield return null; // 暂停一帧，等待下一帧继续执行
-            }
-            
-            EditorUtility.ClearProgressBar();
-            
-            if (request.Status == StatusCode.Success)
-            {
-                Debug.Log($"Package added: {request.Result.packageId}");
-            }
-            else if (request.Status >= StatusCode.Failure)
-            {
-                string errorMsg = $"Failed to add package {address}: {request.Error.message}";
-                Debug.LogError(errorMsg);
-                throw new Exception(errorMsg);
-            }
-        }
-
-        /*private static async Task AddPackage(string address)
+        private static async Task AddPackage(string address)
         {
             // 异步添加包
             AddRequest request = Client.Add(address);
@@ -222,7 +194,7 @@ namespace ZF.Setup.Installer
                     EditorUtility.DisplayProgressBar("添加包", $"正在添加: {address}", progress);
                 }
             }
-        }*/
+        }
 
         /// <summary>
         /// 查找匹配的闭合方括号

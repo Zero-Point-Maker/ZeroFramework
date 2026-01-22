@@ -6,6 +6,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Runtime.Serialization.Formatters.Binary;
 using System.Linq;
+using System.Threading.Tasks;
 
 namespace ZF.Setup.Installer
 {
@@ -276,94 +277,18 @@ namespace ZF.Setup.Installer
         #endregion
 
         #region 安装与卸载
-
-        public static IEnumerator Install(ModuleType type, string moduleName, ModuleTypeComponent typeComponent,
+        
+        public static async Task Install(ModuleType type, string moduleName, ModuleTypeComponent typeComponent,
             ModuleComponent component, Action onComplete = null)
         {
             LogInfo($"开始安装模块：{moduleName} - 类型：{type} - 组件：{typeComponent}");
             if (_infos.TryGetValue(type, out var info))
             {
-                // 安装依赖模块
-                if (component.dependencyModules is { Count: > 0 })
-                {
-                    foreach (var module in component.dependencyModules)
-                    {
-                        bool dependencyModuleAdded = _addedModule.GetValueOrDefault(module.moduleId);
-                        if (!dependencyModuleAdded)
-                        {
-                            var dependencyModule = _modules[module.moduleId];
-                            LogWarning($"\t缺少依赖模块：{dependencyModule.name}/{module.typeComponent}");
-
-                            if (dependencyModule.components.TryGetValue(module.typeComponent,
-                                    out var dependencyComponent))
-                            {
-                                var moduleType = _moduleTypes.GetValueOrDefault(dependencyModule.id);
-                                yield return Install(moduleType, dependencyModule.name, module.typeComponent,
-                                    dependencyComponent);
-                            }
-                        }
-                    }
-                }
-
-                // 安装依赖URL
-                if (component.dependencyURL is { Count: > 0 })
-                {
-                    foreach (var url in component.dependencyURL)
-                    {
-                        bool dependencyUrlAdded = _addedUrl.GetValueOrDefault(url);
-                        if (!dependencyUrlAdded)
-                        {
-                            LogInfo($"\t添加依赖的URL：{url}");
-                            yield return InstallerHelper.AddGitPackage(url);
-                        }
-                    }
-                }
-
-                // 安装依赖包
-                if (component.dependencyRegistries is { Count: > 0 })
-                {
-                    foreach (var registry in component.dependencyRegistries)
-                    {
-                        bool addedRegistry = _addedRegistry.GetValueOrDefault(registry);
-                        if (!addedRegistry)
-                        {
-                            LogInfo($"\t添加依赖的注册表：{registry}");
-                            yield return InstallerHelper.AddRegistry(registry);
-                        }
-                    }
-                }
-
-                // 安装作用域注册表
-                if (component.scopedRegistries is { Count: > 0 })
-                {
-                    foreach (var scopedRegistry in component.scopedRegistries)
-                    {
-                        bool addedScopedRegistry = _addedScopedRegistry.GetValueOrDefault(scopedRegistry.name);
-                        if (!addedScopedRegistry)
-                        {
-                            LogInfo($"\t添加作用域注册表：{scopedRegistry.name}");
-                            yield return InstallerHelper.AddScopedRegistry(scopedRegistry.name, scopedRegistry.url,
-                                scopedRegistry.scopes);
-                        }
-                    }
-                }
-
-                // 检测前置组件的安装
-                foreach (ModuleTypeComponent addTypeComponent in Enum.GetValues(typeof(ModuleTypeComponent)))
-                {
-                    if (addTypeComponent < typeComponent)
-                    {
-                        bool hasComponent = _addedComponent.GetValueOrDefault((moduleName, addTypeComponent));
-                        if (!hasComponent)
-                        {
-                            if (_components.TryGetValue((moduleName, addTypeComponent), out var addComponent))
-                            {
-                                yield return Install(type, moduleName, addTypeComponent, addComponent);
-                            }
-                        }
-                    }
-                    else break;
-                }
+                if(component.dependOnModule) await InstallDependencyModules(component);
+                if(component.dependOnURL) await InstallDependencyURL(component);
+                if(component.dependOnRegistry) await InstallRegistries(component);
+                if(component.dependOnScopedRegistries) await InstallScopes(component);
+                await InstallPreComponent(type, moduleName, typeComponent);
 
                 // 安装组件
                 var prefix = $"{moduleName}_{typeComponent}_";
@@ -381,12 +306,96 @@ namespace ZF.Setup.Installer
             }
         }
 
-        public static IEnumerator InstallAll(Action<int, int> onProgress = null, Action onComplete = null)
+        // 安装依赖模块
+        private static async Task InstallDependencyModules(ModuleComponent component)
+        {
+            if (component.dependencyModules is { Count: > 0 })
+            {
+                foreach (var dependencyModule in component.dependencyModules)
+                {
+                    var module = _modules[dependencyModule.moduleId];
+                    bool hasComponent =
+                        _addedComponent.GetValueOrDefault((module.name, dependencyModule.typeComponent));
+                    if (hasComponent) continue;
+                    
+                    LogWarning($"\t缺少依赖模块：{module.name}/{dependencyModule.typeComponent}");
+                    if (!module.components.TryGetValue(dependencyModule.typeComponent,
+                            out var dependencyComponent)) continue;
+                    
+                    var moduleType = _moduleTypes.GetValueOrDefault(module.id);
+                    await Install(moduleType, module.name, dependencyModule.typeComponent,
+                        dependencyComponent);
+                }
+            }
+        }
+
+        // 安装依赖URL
+        private static async Task InstallDependencyURL(ModuleComponent component)
+        {
+            if (component.dependencyURL is { Count: > 0 })
+            {
+                foreach (var url in from url in component.dependencyURL let dependencyUrlAdded = _addedUrl.GetValueOrDefault(url) where !dependencyUrlAdded select url)
+                {
+                    LogInfo($"\t添加依赖的URL：{url}");
+                    await InstallerHelper.AddGitPackage(url);
+                }
+            }
+        }
+
+        // 安装依赖包
+        private static async Task InstallRegistries(ModuleComponent component)
+        {
+            if (component.dependencyRegistries is { Count: > 0 })
+            {
+                foreach (var registry in from registry in component.dependencyRegistries let addedRegistry = _addedRegistry.GetValueOrDefault(registry) where !addedRegistry select registry)
+                {
+                    LogInfo($"\t添加依赖的注册表：{registry}");
+                    await InstallerHelper.AddRegistry(registry);
+                }
+            }
+        }
+
+        // 安装作用域注册表
+        private static async Task InstallScopes(ModuleComponent component)
+        {
+            if (component.scopedRegistries is { Count: > 0 })
+            {
+                foreach (var scopedRegistry in from scopedRegistry in component.scopedRegistries let addedScopedRegistry = _addedScopedRegistry.GetValueOrDefault(scopedRegistry.name) where !addedScopedRegistry select scopedRegistry)
+                {
+                    LogInfo($"\t添加作用域注册表：{scopedRegistry.name}");
+                    await InstallerHelper.AddScopedRegistry(scopedRegistry.name, scopedRegistry.url,
+                        scopedRegistry.scopes);
+                }
+            }
+        }
+
+        // 安装前置组件
+        private static async Task InstallPreComponent(ModuleType type, string moduleName,
+            ModuleTypeComponent typeComponent)
+        {
+            foreach (ModuleTypeComponent addTypeComponent in Enum.GetValues(typeof(ModuleTypeComponent)))
+            {
+                if (addTypeComponent < typeComponent)
+                {
+                    bool hasComponent = _addedComponent.GetValueOrDefault((moduleName, addTypeComponent));
+                    if (!hasComponent)
+                    {
+                        if (_components.TryGetValue((moduleName, addTypeComponent), out var addComponent))
+                        {
+                            await Install(type, moduleName, addTypeComponent, addComponent);
+                        }
+                    }
+                }
+                else break;
+            }
+        }
+
+        public static async Task InstallAll(Action<int, int> onProgress = null, Action onComplete = null)
         {
             if (_config == null || _config.modules == null)
             {
                 onComplete?.Invoke();
-                yield break;
+                return;
             }
 
             int totalModules = 0;
@@ -412,7 +421,7 @@ namespace ZF.Setup.Installer
                         bool isAdded = _addedComponent.GetValueOrDefault((module.name, typeComponent));
                         if (!isAdded)
                         {
-                            yield return Install(type, module.name, typeComponent, component);
+                            await Install(type, module.name, typeComponent, component);
                             installedModules++;
                             onProgress?.Invoke(installedModules, totalModules);
                         }

@@ -122,7 +122,7 @@ namespace ZF.Setup.Installer
                 {
                     if (EditorUtility.DisplayDialog("确认", "确定要安装所有未安装的模块吗？", "确定", "取消"))
                     {
-                        RunCoroutine(Installer.InstallAll(
+                        _ = Installer.InstallAll(
                             (current, total) =>
                             {
                                 EditorUtility.DisplayProgressBar("正在安装模块", $"正在安装: {current}/{total}",
@@ -132,7 +132,7 @@ namespace ZF.Setup.Installer
                             {
                                 EditorUtility.ClearProgressBar();
                                 AssetDatabase.Refresh();
-                            }));
+                            });
                     }
                 }
 
@@ -246,8 +246,8 @@ namespace ZF.Setup.Installer
                             }
                             else
                             {
-                                RunCoroutine(Installer.Install(type, module.name, typeComponent, component,
-                                    AssetDatabase.Refresh));
+                                _ = Installer.Install(type, module.name, typeComponent, component,
+                                    AssetDatabase.Refresh);
                             }
                         }
                     }
@@ -267,97 +267,93 @@ namespace ZF.Setup.Installer
 
         private void DrawSubDependencyModule(List<ModuleComponent.DependencyModule> dependencyModules)
         {
-            if (dependencyModules is { Count: > 0 })
+            if (dependencyModules is not { Count: > 0 }) return;
+            using (new EditorGUILayout.HorizontalScope())
             {
-                using (new EditorGUILayout.HorizontalScope())
+                EditorGUILayout.LabelField("依赖模块", GUILayout.Width(120));
+                foreach (var module in dependencyModules)
                 {
-                    EditorGUILayout.LabelField("依赖模块", GUILayout.Width(120));
-                    foreach (var module in dependencyModules)
+                    var dependencyModule = Installer.Modules.GetValueOrDefault(module.moduleId);
+                    if (dependencyModule == null)
                     {
-                        var dependencyModule = Installer.Modules.GetValueOrDefault(module.moduleId);
-                        bool hasModule = Installer.AddedComponent.GetValueOrDefault((dependencyModule.name, module.typeComponent));
-                        GUILayout.Box(
-                            $"{dependencyModule.name}\n[{module.typeComponent.ToString().Substring(0, 3).ToUpper()}]",
-                            new GUIStyle(GUI.skin.box)
-                                { normal = { textColor = hasModule ? Color.green : Color.red } });
+                        Debug.LogError($"依赖模块不存在：{module.moduleId},请检查BuilderConfig配置是否正确");
+                        continue;
                     }
+
+                    bool hasModule = Installer.AddedComponent.GetValueOrDefault((dependencyModule.name, module.typeComponent));
+                    GUILayout.Box(
+                        $"{dependencyModule.name}\n[{module.typeComponent.ToString().Substring(0, 3).ToUpper()}]",
+                        new GUIStyle(GUI.skin.box)
+                            { normal = { textColor = hasModule ? Color.green : Color.red } });
                 }
             }
         }
 
         private void DrawSubDependencyURL(List<string> dependencyUrls)
         {
-            if (dependencyUrls is { Count: > 0 })
+            if (dependencyUrls is not { Count: > 0 }) return;
+            EditorGUILayout.LabelField("依赖URL", GUILayout.Width(120));
+            EditorGUI.indentLevel++;
+            foreach (var url in dependencyUrls)
             {
-                EditorGUILayout.LabelField("依赖URL", GUILayout.Width(120));
-                EditorGUI.indentLevel++;
-                foreach (var url in dependencyUrls)
-                {
-                    bool hasUrl = Installer.AddedUrl.GetValueOrDefault(url);
-                    EditorGUILayout.LabelField(url,
-                        new GUIStyle(EditorStyles.label)
-                            { normal = { textColor = hasUrl ? Color.green : Color.red } });
-                }
-
-                EditorGUI.indentLevel--;
+                bool hasUrl = Installer.AddedUrl.GetValueOrDefault(url);
+                EditorGUILayout.LabelField(url,
+                    new GUIStyle(EditorStyles.label)
+                        { normal = { textColor = hasUrl ? Color.green : Color.red } });
             }
+
+            EditorGUI.indentLevel--;
         }
 
         private void DrawSubRegistries(List<string> dependencyRegistries)
         {
-            if (dependencyRegistries is { Count: > 0 })
+            if (dependencyRegistries is not { Count: > 0 }) return;
+            EditorGUILayout.LabelField("依赖Unity包", GUILayout.Width(120));
+            EditorGUI.indentLevel++;
+            foreach (var registry in dependencyRegistries)
             {
-                EditorGUILayout.LabelField("依赖Unity包", GUILayout.Width(120));
-                EditorGUI.indentLevel++;
-                foreach (var registry in dependencyRegistries)
-                {
-                    bool hasRegistry = Installer.AddedRegistry.GetValueOrDefault(registry);
-                    EditorGUILayout.LabelField(registry,
-                        new GUIStyle(EditorStyles.label)
-                            { normal = { textColor = hasRegistry ? Color.green : Color.red } });
-                }
-
-                EditorGUI.indentLevel--;
+                bool hasRegistry = Installer.AddedRegistry.GetValueOrDefault(registry);
+                EditorGUILayout.LabelField(registry,
+                    new GUIStyle(EditorStyles.label)
+                        { normal = { textColor = hasRegistry ? Color.green : Color.red } });
             }
+
+            EditorGUI.indentLevel--;
         }
 
         private void DrawSubScopedRegistries(List<ScopedRegistry> scopedRegistries)
         {
-            if (scopedRegistries is { Count: > 0 })
+            if (scopedRegistries is not { Count: > 0 }) return;
+            EditorGUILayout.LabelField("作用域注册表", GUILayout.Width(120));
+            EditorGUI.indentLevel++;
+            foreach (var registry in scopedRegistries)
             {
-                EditorGUILayout.LabelField("作用域注册表", GUILayout.Width(120));
-                EditorGUI.indentLevel++;
-                foreach (var registry in scopedRegistries)
+                bool hasRegistry = Installer.AddedScopedRegistry.GetValueOrDefault(registry.name);
+                var message = $"name\t{registry.name}\n" + $"url\t{registry.url}\n";
+                foreach (var scope in registry.scopes)
                 {
-                    bool hasRegistry = Installer.AddedScopedRegistry.GetValueOrDefault(registry.name);
-                    var message = $"name\t{registry.name}\n" + $"url\t{registry.url}\n";
-                    foreach (var scope in registry.scopes)
-                    {
-                        bool last = scope == registry.scopes.Last();
-                        message += $"scope\t{scope}";
-                        if (!last) message += "\n";
-                    }
-
-                    EditorGUILayout.HelpBox(message, hasRegistry ? MessageType.Info : MessageType.Warning);
+                    bool last = scope == registry.scopes.Last();
+                    message += $"scope\t{scope}";
+                    if (!last) message += "\n";
                 }
 
-                EditorGUI.indentLevel--;
+                EditorGUILayout.HelpBox(message, hasRegistry ? MessageType.Info : MessageType.Warning);
             }
+
+            EditorGUI.indentLevel--;
         }
 
         private void DrawSubPath(List<string> paths)
         {
-            if (paths is { Count: > 0 })
+            if (paths is not { Count: > 0 }) return;
+            EditorGUILayout.LabelField("模块路径", GUILayout.Width(120));
+            EditorGUI.indentLevel++;
+            foreach (var path in paths)
             {
-                EditorGUILayout.LabelField("模块路径", GUILayout.Width(120));
-                EditorGUI.indentLevel++;
-                foreach (var path in paths)
-                {
-                    EditorGUILayout.LabelField(path);
-                }
-
-                EditorGUI.indentLevel--;
+                EditorGUILayout.LabelField(path);
             }
+
+            EditorGUI.indentLevel--;
         }
 
         private void DrawTools()
@@ -402,42 +398,6 @@ namespace ZF.Setup.Installer
             }
 
             EditorGUILayout.EndScrollView();
-        }
-
-        #endregion
-        
-        #region 协程
-
-        // 1. 保存当前执行的协程
-        private static IEnumerator _activeCoroutine;
-        
-        // 2. 协程更新回调
-        private static void UpdateCoroutine()
-        {
-            if (_activeCoroutine != null && _activeCoroutine.MoveNext())
-            {
-                // 协程继续执行
-                return;
-            }
-            
-            // 3. 协程结束，清理资源
-            _activeCoroutine = null;
-            EditorApplication.update -= UpdateCoroutine;
-        }
-        
-        // 4. 自定义的"启动协程"方法（不是Unity内置的！）
-        private static void RunCoroutine(IEnumerator coroutine)
-        {
-            // 停止当前协程（可选，根据需求决定）
-            if (_activeCoroutine != null)
-            {
-                _activeCoroutine = null;
-                EditorApplication.update -= UpdateCoroutine;
-            }
-            
-            // 5. 启动新协程
-            _activeCoroutine = coroutine;
-            EditorApplication.update += UpdateCoroutine;
         }
 
         #endregion
