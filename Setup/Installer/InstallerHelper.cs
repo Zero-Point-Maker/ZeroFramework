@@ -16,17 +16,27 @@ namespace ZF.Setup.Installer
         
         public static bool CheckGitPackageAdded(string gitUrl)
         {
-            // 同步获取所有包列表
-            ListRequest request = Client.List(true); // true = 包含依赖项
-        
-            // 轮询等待结果
-            while (!request.IsCompleted) {}
-        
+            ListRequest request = Client.List(true);
+            
+            float timeout = 10f;
+            float elapsed = 0f;
+            float checkInterval = 0.016f;
+            
+            while (!request.IsCompleted && elapsed < timeout)
+            {
+                elapsed += checkInterval;
+                System.Threading.Thread.Sleep(1);
+            }
+
+            if (!request.IsCompleted && elapsed >= timeout)
+            {
+                Debug.LogError("包检测超时");
+            }
+
             if (request.Status == StatusCode.Success)
             {
                 foreach (var package in request.Result)
                 {
-                    // 检查包的来源是否为 Git URL
                     if (package.source == PackageSource.Git && 
                         package.packageId.Contains(gitUrl))
                     {

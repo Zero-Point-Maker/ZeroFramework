@@ -7,6 +7,7 @@ using System.IO.Compression;
 using System.Runtime.Serialization.Formatters.Binary;
 using System.Linq;
 using System.Threading.Tasks;
+using UnityEditor;
 
 namespace ZF.Setup.Installer
 {
@@ -35,6 +36,7 @@ namespace ZF.Setup.Installer
         private static Dictionary<string, bool> _addedRegistry; // unity包->是否已添加
         private static Dictionary<string, bool> _addedScopedRegistry;  // 模块作用域->是否已添加
         private static Dictionary<(string, ModuleTypeComponent), bool> _addedComponent;    // (模块名,组件类型)->是否已添加
+        private static Dictionary<string, bool> _gitPackageCache;
         #endregion
 
         #region 属性
@@ -54,9 +56,10 @@ namespace ZF.Setup.Installer
             _components = new Dictionary<(string, ModuleTypeComponent), ModuleComponent>();
             _moduleTypes = new Dictionary<int, ModuleType>();
             _infos = new Dictionary<ModuleType, ModuleTypeInfo>();
+            _gitPackageCache = new Dictionary<string, bool>();
             
             LoadModules();
-            CheckAdded();
+            CheckAddedInternal();
         }
 
         public static void Clear()
@@ -69,6 +72,7 @@ namespace ZF.Setup.Installer
             _addedRegistry = null;
             _addedScopedRegistry = null;
             _addedComponent = null;
+            _gitPackageCache = null;
         }
 
         public static long GetModuleTypeVersion(ModuleType type)
@@ -187,13 +191,14 @@ namespace ZF.Setup.Installer
             }
         }
 
-        private static void CheckAdded()
+        private static void CheckAddedInternal()
         {
             _addedModule = new Dictionary<int, bool>();
             _addedUrl = new Dictionary<string, bool>();
             _addedRegistry = new Dictionary<string, bool>();
             _addedScopedRegistry = new Dictionary<string, bool>();
             _addedComponent = new Dictionary<(string, ModuleTypeComponent), bool>();
+            _gitPackageCache = new Dictionary<string, bool>();
             
             foreach (var moduleList in _config.modules.Values)
             {
@@ -205,7 +210,12 @@ namespace ZF.Setup.Installer
                         {
                             foreach (var url in component.dependencyURL)
                             {
-                                _addedUrl[url] = InstallerHelper.CheckGitPackageAdded(url);
+                                if (!_gitPackageCache.TryGetValue(url, out var cachedResult))
+                                {
+                                    cachedResult = InstallerHelper.CheckGitPackageAdded(url);
+                                    _gitPackageCache[url] = cachedResult;
+                                }
+                                _addedUrl[url] = cachedResult;
                             }
                         }
 
@@ -297,11 +307,11 @@ namespace ZF.Setup.Installer
                     if (kv.Key.StartsWith(prefix))
                     {
                         var path = kv.Key.Replace(prefix, "");
-                        DeserializeBytesToPath(kv.Value, path);
+                        DeserializeBytesToPath(kv.Value, path, moduleName);
                     }
                 }
 
-                CheckAdded();
+                CheckAddedInternal();
                 onComplete?.Invoke();
             }
         }
@@ -510,7 +520,7 @@ namespace ZF.Setup.Installer
                     }
                 }
 
-                CheckAdded();
+                CheckAddedInternal();
             }
         }
         #endregion
@@ -556,70 +566,61 @@ namespace ZF.Setup.Installer
         /// </summary>
         /// <param name="data">字节数组</param>
         /// <param name="targetPath">目标路径</param>
-        private static void DeserializeBytesToPath(byte[] data, string targetPath)
+        /// <param name="moduleName">模块名称</param>
+        private static void DeserializeBytesToPath(byte[] data, string targetPath, string moduleName = null)
         {
-            // 确保临时目录存在
             EnsureDirectoryExists(TEMP_PATH);
-
-            // 生成唯一的临时文件路径（使用 Guid 避免冲突）
+            
             string tempZipFilePath = Path.Combine(TEMP_PATH, $"temp_{Guid.NewGuid()}.zip");
-
-            // 将字节数组写入临时文件
-            File.WriteAllBytes(tempZipFilePath, data);
-
-            // 解析目标路径，处理../开头的相对路径
-            string resolvedTargetPath = ResolvePath(targetPath);
-            string resolvedTargetDirectory = Path.GetDirectoryName(resolvedTargetPath);
-            if (!string.IsNullOrEmpty(resolvedTargetDirectory))
-            {
-                EnsureDirectoryExists(resolvedTargetDirectory);
-            }
-
-            string tempExtractDir = Path.Combine(TEMP_PATH, $"temp_{Guid.NewGuid()}");
+            string tempExtractDir = null;
+            string displayName = moduleName ?? Path.GetFileName(targetPath);
+            
             try
             {
-                // 1. 创建临时解压目录
+                EditorUtility.DisplayProgressBar("正在安装", $"正在处理: {displayName}", 0.1f);
+                File.WriteAllBytes(tempZipFilePath, data);
+                
+                string resolvedTargetPath = ResolvePath(targetPath);
+                string resolvedTargetDirectory = Path.GetDirectoryName(resolvedTargetPath);
+                if (!string.IsNullOrEmpty(resolvedTargetDirectory))
+                {
+                    EnsureDirectoryExists(resolvedTargetDirectory);
+                }
+                
+                tempExtractDir = Path.Combine(TEMP_PATH, $"temp_{Guid.NewGuid()}");
                 EnsureDirectoryExists(tempExtractDir);
-
-                // 2. 解压ZIP文件到临时目录
+                
+                EditorUtility.DisplayProgressBar("正在安装", $"正在解压: {displayName}", 0.4f);
                 ZipFile.ExtractToDirectory(tempZipFilePath, tempExtractDir);
-
-                // 3. 获取解压后的内容
+                
+                EditorUtility.DisplayProgressBar("正在安装", $"正在安装: {displayName}", 0.7f);
                 string[] extractedItems = Directory.GetFileSystemEntries(tempExtractDir);
-
-                // 4. 处理解压后的内容
+                
                 foreach (string extractedItem in extractedItems)
                 {
-                    // 目标路径
                     string itemName = Path.GetFileName(extractedItem);
                     string finalTargetPath = Path.Combine(resolvedTargetPath, itemName);
-
-                    // 确保目标目录存在
+                    
                     EnsureDirectoryExists(Path.GetDirectoryName(finalTargetPath));
-
+                    
                     if (Directory.Exists(extractedItem))
                     {
-                        // 如果是目录，先删除旧目录（如果存在），再移动
                         if (Directory.Exists(finalTargetPath))
                         {
                             Directory.Delete(finalTargetPath, true);
                         }
-
                         Directory.Move(extractedItem, finalTargetPath);
                     }
                     else if (File.Exists(extractedItem))
                     {
-                        // 如果是文件，先删除旧文件（如果存在），再移动
                         if (File.Exists(finalTargetPath))
                         {
                             File.Delete(finalTargetPath);
                         }
-
                         File.Move(extractedItem, finalTargetPath);
                     }
                 }
-
-                // 5. 检查并处理特殊情况：如果目标路径是目录且只有一个文件，则提取该文件到同级目录并删除原目录
+                
                 if (Directory.Exists(resolvedTargetPath))
                 {
                     string[] itemsInTarget = Directory.GetFileSystemEntries(resolvedTargetPath);
@@ -628,33 +629,25 @@ namespace ZF.Setup.Installer
                         var singleFile = itemsInTarget[0];
                         if (File.Exists(singleFile))
                         {
-                            // 提取文件到目标路径的同级目录
                             string fileName = Path.GetFileName(singleFile);
                             string parentDir = Path.GetDirectoryName(resolvedTargetPath);
                             if (parentDir != null)
                             {
                                 string newFilePath = Path.Combine(parentDir, fileName);
-
-                                // 处理文件名与文件夹名相同的情况
-                                // 1. 先将文件移动到临时位置
                                 string tempFilePath = Path.Combine(parentDir, $"temp_{Guid.NewGuid()}_{fileName}");
                                 File.Move(singleFile, tempFilePath);
-
-                                // 2. 删除原目录
                                 Directory.Delete(resolvedTargetPath, true);
-
-                                // 3. 删除已存在的同名文件（如果有）
                                 if (File.Exists(newFilePath))
                                 {
                                     File.Delete(newFilePath);
                                 }
-
-                                // 4. 将临时文件重命名为目标文件名
                                 File.Move(tempFilePath, newFilePath);
                             }
                         }
                     }
                 }
+                
+                EditorUtility.DisplayProgressBar("正在安装", $"完成: {displayName}", 1f);
             }
             catch (Exception ex)
             {
@@ -662,19 +655,15 @@ namespace ZF.Setup.Installer
             }
             finally
             {
-                // 清理临时ZIP文件
+                EditorUtility.ClearProgressBar();
                 if (File.Exists(tempZipFilePath))
                 {
                     File.Delete(tempZipFilePath);
                 }
-
-                // 清理临时解压目录
                 if (Directory.Exists(tempExtractDir))
                 {
                     Directory.Delete(tempExtractDir, true);
                 }
-
-                // 清理临时目录
                 if (Directory.Exists(TEMP_PATH))
                 {
                     Directory.Delete(TEMP_PATH, true);
