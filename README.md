@@ -154,7 +154,7 @@ uiModule.OpenWindow<MainWindow>();
 uiModule.CloseWindow<MainWindow>();
 ```
 
-## 📦 模块列表
+## 📋 模块列表
 
 ### 一级模块（核心功能）
 - `IArchitectureModule`：架构管理
@@ -178,7 +178,7 @@ uiModule.CloseWindow<MainWindow>();
 - `ISceneModule`：场景管理
 - `IUIModule`：UI 系统
 
-## 🔥 最佳实践
+## 💡 最佳实践
 
 1. **按需加载模块**：只加载项目实际需要的模块，避免不必要的性能开销
 2. **使用接口通信**：模块间通过接口通信，不要直接依赖具体实现
