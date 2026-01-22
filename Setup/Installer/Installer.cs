@@ -419,8 +419,7 @@ namespace ZF.Setup.Installer
                     }
                 }
             }
-
-            CheckAdded();
+            
             onComplete?.Invoke();
         }
 
