@@ -275,7 +275,6 @@ namespace ZF.Setup.Installer
                     foreach (var module in dependencyModules)
                     {
                         var dependencyModule = Installer.Modules.GetValueOrDefault(module.moduleId);
-                        if (dependencyModule == null) continue;
                         bool hasModule = Installer.AddedComponent.GetValueOrDefault((dependencyModule.name, module.typeComponent));
                         GUILayout.Box(
                             $"{dependencyModule.name}\n[{module.typeComponent.ToString().Substring(0, 3).ToUpper()}]",
