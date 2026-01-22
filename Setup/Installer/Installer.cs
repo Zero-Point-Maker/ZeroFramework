@@ -1,5 +1,4 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using System.IO;
@@ -7,7 +6,6 @@ using System.IO.Compression;
 using System.Runtime.Serialization.Formatters.Binary;
 using System.Linq;
 using System.Threading.Tasks;
-using UnityEditor;
 
 namespace ZF.Setup.Installer
 {
@@ -287,17 +285,19 @@ namespace ZF.Setup.Installer
         #endregion
 
         #region 安装与卸载
-        
+
         public static async Task Install(ModuleType type, string moduleName, ModuleTypeComponent typeComponent,
             ModuleComponent component, Action onComplete = null)
         {
             LogInfo($"开始安装模块：{moduleName} - 类型：{type} - 组件：{typeComponent}");
+            if (onComplete != null) UnityEditor.AssetDatabase.StartAssetEditing();
+
             if (_infos.TryGetValue(type, out var info))
             {
-                if(component.dependOnModule) await InstallDependencyModules(component);
-                if(component.dependOnURL) await InstallDependencyURL(component);
-                if(component.dependOnRegistry) await InstallRegistries(component);
-                if(component.dependOnScopedRegistries) await InstallScopes(component);
+                if (component.dependOnModule) await InstallDependencyModules(component);
+                if (component.dependOnURL) await InstallDependencyURL(component);
+                if (component.dependOnRegistry) await InstallRegistries(component);
+                if (component.dependOnScopedRegistries) await InstallScopes(component);
                 await InstallPreComponent(type, moduleName, typeComponent);
 
                 // 安装组件
@@ -307,13 +307,15 @@ namespace ZF.Setup.Installer
                     if (kv.Key.StartsWith(prefix))
                     {
                         var path = kv.Key.Replace(prefix, "");
-                        DeserializeBytesToPath(kv.Value, path, moduleName);
+                        DeserializeBytesToPath(kv.Value, path);
                     }
                 }
 
                 CheckAddedInternal();
                 onComplete?.Invoke();
             }
+
+            if (onComplete != null) UnityEditor.AssetDatabase.StopAssetEditing();
         }
 
         // 安装依赖模块
@@ -422,6 +424,8 @@ namespace ZF.Setup.Installer
                 }
             }
 
+            UnityEditor.AssetDatabase.StartAssetEditing();
+            
             foreach (var (type, moduleList) in _config.modules)
             {
                 foreach (var module in moduleList)
@@ -439,6 +443,7 @@ namespace ZF.Setup.Installer
                 }
             }
             
+            UnityEditor.AssetDatabase.StopAssetEditing();
             onComplete?.Invoke();
         }
 
@@ -566,18 +571,15 @@ namespace ZF.Setup.Installer
         /// </summary>
         /// <param name="data">字节数组</param>
         /// <param name="targetPath">目标路径</param>
-        /// <param name="moduleName">模块名称</param>
-        private static void DeserializeBytesToPath(byte[] data, string targetPath, string moduleName = null)
+        private static void DeserializeBytesToPath(byte[] data, string targetPath)
         {
             EnsureDirectoryExists(TEMP_PATH);
             
             string tempZipFilePath = Path.Combine(TEMP_PATH, $"temp_{Guid.NewGuid()}.zip");
             string tempExtractDir = null;
-            string displayName = moduleName ?? Path.GetFileName(targetPath);
             
             try
             {
-                EditorUtility.DisplayProgressBar("正在安装", $"正在处理: {displayName}", 0.1f);
                 File.WriteAllBytes(tempZipFilePath, data);
                 
                 string resolvedTargetPath = ResolvePath(targetPath);
@@ -590,10 +592,8 @@ namespace ZF.Setup.Installer
                 tempExtractDir = Path.Combine(TEMP_PATH, $"temp_{Guid.NewGuid()}");
                 EnsureDirectoryExists(tempExtractDir);
                 
-                EditorUtility.DisplayProgressBar("正在安装", $"正在解压: {displayName}", 0.4f);
                 ZipFile.ExtractToDirectory(tempZipFilePath, tempExtractDir);
                 
-                EditorUtility.DisplayProgressBar("正在安装", $"正在安装: {displayName}", 0.7f);
                 string[] extractedItems = Directory.GetFileSystemEntries(tempExtractDir);
                 
                 foreach (string extractedItem in extractedItems)
@@ -646,8 +646,6 @@ namespace ZF.Setup.Installer
                         }
                     }
                 }
-                
-                EditorUtility.DisplayProgressBar("正在安装", $"完成: {displayName}", 1f);
             }
             catch (Exception ex)
             {
@@ -655,7 +653,6 @@ namespace ZF.Setup.Installer
             }
             finally
             {
-                EditorUtility.ClearProgressBar();
                 if (File.Exists(tempZipFilePath))
                 {
                     File.Delete(tempZipFilePath);
