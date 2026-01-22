@@ -1,7 +1,7 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
-using System.Threading.Tasks;
 using UnityEditor;
 using UnityEditor.PackageManager;
 using UnityEditor.PackageManager.Requests;
@@ -37,23 +37,16 @@ namespace ZF.Setup.Installer
             return false;
         }
 
-        public static async Task AddGitPackage(string gitUrl)
+        public static IEnumerator AddGitPackage(string gitUrl)
         {
-            try
+            if (string.IsNullOrEmpty(gitUrl) ||
+                (!gitUrl.StartsWith("https://") && !gitUrl.StartsWith("git@") && !gitUrl.StartsWith("git+")))
             {
-                if (string.IsNullOrEmpty(gitUrl) ||
-                    (!gitUrl.StartsWith("https://") && !gitUrl.StartsWith("git@") && !gitUrl.StartsWith("git+")))
-                {
-                    Debug.LogError("无效的 Git URL 格式");
-                    return;
-                }
-                
-                await AddPackage(gitUrl);
+                Debug.LogError("无效的 Git URL 格式");
+                yield break;
             }
-            catch (Exception e)
-            {
-                Debug.LogError($"Failed to add package from {gitUrl}: {e.Message}");
-            }
+            
+            yield return AddPackageCoroutine(gitUrl);
         }
 
         public static bool CheckRegistryAdded(string name)
@@ -65,16 +58,9 @@ namespace ZF.Setup.Installer
             return content.Contains(name);
         }
 
-        public static async Task AddRegistry(string name)
+        public static IEnumerator AddRegistry(string name)
         {
-            try
-            {
-                await AddPackage(name);
-            }
-            catch (Exception e)
-            {
-                Debug.LogError($"Failed to add package from {name}: {e.Message}");
-            }
+            yield return AddPackageCoroutine(name);
         }
 
         public static bool CheckScopedRegistryAdded(string name, string url)
@@ -85,99 +71,124 @@ namespace ZF.Setup.Installer
             // 简单字符串匹配：查找包含名称或 URL 的 Registry 条目
             return content.Contains(name) && content.Contains(url);
         }
-        
-        public static async Task AddScopedRegistry(string name, string url, List<string> scopes)
+
+        public static IEnumerator AddScopedRegistry(string name, string url, List<string> scopes)
         {
-            try
+            if (!File.Exists(ManifestPath))
             {
-                if (!File.Exists(ManifestPath))
+                Debug.LogError("未找到 Packages/manifest.json 文件");
+                yield break;
+            }
+
+            // 检查是否已存在
+            if (CheckScopedRegistryAdded(name, url))
+            {
+                Debug.LogWarning($"ScopedRegistry 已存在：{name}");
+                yield break;
+            }
+
+            string content = File.ReadAllText(ManifestPath);
+            string updatedContent = "";
+
+            // 1. 生成新 Registry 的 JSON 字符串
+            List<string> quotedScopes = new List<string>();
+            foreach (string scope in scopes)
+            {
+                quotedScopes.Add($"\"{scope}\"");
+            }
+
+            string scopeArray = "[" + string.Join(",", quotedScopes) + "]";
+            string newRegistryStr = $"\n    {{\"name\":\"{name}\",\"url\":\"{url}\",\"scopes\":{scopeArray}}}";
+
+            // 2. 查找 scopedRegistries 位置
+            int registriesIndex = content.IndexOf("\"scopedRegistries\"", StringComparison.Ordinal);
+
+            if (registriesIndex == -1)
+            {
+                // 不存在 scopedRegistries 字段，添加到 dependencies 之后
+                int dependenciesEnd = content.IndexOf("}",
+                    content.IndexOf("\"dependencies\"", StringComparison.Ordinal), StringComparison.Ordinal);
+                if (dependenciesEnd == -1)
                 {
-                    Debug.LogError("未找到 Packages/manifest.json 文件");
-                    return;
+                    Debug.LogError("无法找到 dependencies 字段");
+                    yield break;
                 }
 
-                // 检查是否已存在
-                if (CheckScopedRegistryAdded(name, url))
+                // 构建完整的 scopedRegistries 字段
+                string registriesSection = $",\n  \"scopedRegistries\": [{newRegistryStr.Trim()}\n  ]";
+                updatedContent = content.Insert(dependenciesEnd + 1, registriesSection);
+            }
+            else
+            {
+                // 已存在 scopedRegistries 字段，添加到数组中
+                int arrayEnd = FindMatchingBracket(content,
+                    content.IndexOf("[", registriesIndex, StringComparison.Ordinal));
+                if (arrayEnd == -1)
                 {
-                    Debug.LogWarning($"ScopedRegistry 已存在：{name}");
-                    return;
+                    Debug.LogError("无法解析 scopedRegistries 数组");
+                    yield break;
                 }
 
-                string content = File.ReadAllText(ManifestPath);
-                string updatedContent = "";
+                // 检查数组是否为空
+                int arrayStart = content.IndexOf("[", registriesIndex, StringComparison.Ordinal);
+                string arrayContent = content.Substring(arrayStart + 1, arrayEnd - arrayStart - 1).Trim();
 
-                // 1. 生成新 Registry 的 JSON 字符串
-                List<string> quotedScopes = new List<string>();
-                foreach (string scope in scopes)
+                if (string.IsNullOrEmpty(arrayContent))
                 {
-                    quotedScopes.Add($"\"{scope}\"");
-                }
-                string scopeArray = "[" + string.Join(",", quotedScopes) + "]";
-                string newRegistryStr = $"\n    {{\"name\":\"{name}\",\"url\":\"{url}\",\"scopes\":{scopeArray}}}";
-
-                // 2. 查找 scopedRegistries 位置
-                int registriesIndex = content.IndexOf("\"scopedRegistries\"", StringComparison.Ordinal);
-
-                if (registriesIndex == -1)
-                {
-                    // 不存在 scopedRegistries 字段，添加到 dependencies 之后
-                    int dependenciesEnd = content.IndexOf("}", content.IndexOf("\"dependencies\"", StringComparison.Ordinal), StringComparison.Ordinal);
-                    if (dependenciesEnd == -1)
-                    {
-                        Debug.LogError("无法找到 dependencies 字段");
-                        return;
-                    }
-
-                    // 构建完整的 scopedRegistries 字段
-                    string registriesSection = $",\n  \"scopedRegistries\": [{newRegistryStr.Trim()}\n  ]";
-                    updatedContent = content.Insert(dependenciesEnd + 1, registriesSection);
+                    // 空数组，直接添加
+                    updatedContent = content.Replace("[]", $"[{newRegistryStr.Trim()}\n  ]");
                 }
                 else
                 {
-                    // 已存在 scopedRegistries 字段，添加到数组中
-                    int arrayEnd = FindMatchingBracket(content, content.IndexOf("[", registriesIndex, StringComparison.Ordinal));
-                    if (arrayEnd == -1)
-                    {
-                        Debug.LogError("无法解析 scopedRegistries 数组");
-                        return;
-                    }
-
-                    // 检查数组是否为空
-                    int arrayStart = content.IndexOf("[", registriesIndex, StringComparison.Ordinal);
-                    string arrayContent = content.Substring(arrayStart + 1, arrayEnd - arrayStart - 1).Trim();
-
-                    if (string.IsNullOrEmpty(arrayContent))
-                    {
-                        // 空数组，直接添加
-                        updatedContent = content.Replace("[]", $"[{newRegistryStr.Trim()}\n  ]");
-                    }
-                    else
-                    {
-                        // 非空数组，添加到末尾
-                        updatedContent = content.Insert(arrayEnd, $",{newRegistryStr}");
-                    }
+                    // 非空数组，添加到末尾
+                    updatedContent = content.Insert(arrayEnd, $",{newRegistryStr}");
                 }
-
-                // 3. 保存文件
-                File.WriteAllText(ManifestPath, updatedContent);
-                Debug.Log($"成功添加 ScopedRegistry：{name}");
-
-                foreach (var scope in scopes)
-                {
-                    await AddPackage(scope);
-                }
-            
-                Client.Resolve();
             }
-            catch (Exception e)
+
+            // 3. 保存文件
+            File.WriteAllText(ManifestPath, updatedContent);
+            Debug.Log($"成功添加 ScopedRegistry：{name}");
+
+            foreach (var scope in scopes)
             {
-                Debug.LogError($"Failed to add package from {name}/{url}: {e.Message}");
+                yield return AddPackageCoroutine(scope);
             }
+
+            Client.Resolve();
         }
-        
+
         #region 辅助方法
 
-        private static async Task AddPackage(string address)
+        private static IEnumerator AddPackageCoroutine(string address)
+        {
+            // 异步添加包
+            AddRequest request = Client.Add(address);
+            
+            float progress = 0f;
+            float simulatedProgressIncrement = 0.01f;
+            
+            while (!request.IsCompleted)
+            {
+                progress = Mathf.Min(progress + simulatedProgressIncrement, 0.99f);
+                EditorUtility.DisplayProgressBar("添加包", $"正在添加: {address}", progress);
+                yield return null; // 暂停一帧，等待下一帧继续执行
+            }
+            
+            EditorUtility.ClearProgressBar();
+            
+            if (request.Status == StatusCode.Success)
+            {
+                Debug.Log($"Package added: {request.Result.packageId}");
+            }
+            else if (request.Status >= StatusCode.Failure)
+            {
+                string errorMsg = $"Failed to add package {address}: {request.Error.message}";
+                Debug.LogError(errorMsg);
+                throw new Exception(errorMsg);
+            }
+        }
+
+        /*private static async Task AddPackage(string address)
         {
             // 异步添加包
             AddRequest request = Client.Add(address);
@@ -211,7 +222,7 @@ namespace ZF.Setup.Installer
                     EditorUtility.DisplayProgressBar("添加包", $"正在添加: {address}", progress);
                 }
             }
-        }
+        }*/
 
         /// <summary>
         /// 查找匹配的闭合方括号

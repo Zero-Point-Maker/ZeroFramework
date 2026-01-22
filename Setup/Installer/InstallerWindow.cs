@@ -1,9 +1,9 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEditor;
 using System.Linq;
-using System.Threading.Tasks;
 
 namespace ZF.Setup.Installer
 {
@@ -122,7 +122,7 @@ namespace ZF.Setup.Installer
                 {
                     if (EditorUtility.DisplayDialog("确认", "确定要安装所有未安装的模块吗？", "确定", "取消"))
                     {
-                        _ = Installer.InstallAll(
+                        RunCoroutine(Installer.InstallAll(
                             (current, total) =>
                             {
                                 EditorUtility.DisplayProgressBar("正在安装模块", $"正在安装: {current}/{total}",
@@ -132,7 +132,7 @@ namespace ZF.Setup.Installer
                             {
                                 EditorUtility.ClearProgressBar();
                                 AssetDatabase.Refresh();
-                            });
+                            }));
                     }
                 }
 
@@ -216,7 +216,7 @@ namespace ZF.Setup.Installer
                         }
 
                         EditorGUILayout.LabelField("组件");
-                        _ = DrawSubModuleComponents(type, module);
+                        DrawSubModuleComponents(type, module);
                     }
                 }
 
@@ -224,7 +224,7 @@ namespace ZF.Setup.Installer
             }
         }
 
-        private async Task DrawSubModuleComponents(ModuleType type, Module module)
+        private void DrawSubModuleComponents(ModuleType type, Module module)
         {
             foreach (var (typeComponent, component) in module.components)
             {
@@ -246,8 +246,8 @@ namespace ZF.Setup.Installer
                             }
                             else
                             {
-                                await Installer.Install(type, module.name, typeComponent, component,
-                                    AssetDatabase.Refresh);
+                                RunCoroutine(Installer.Install(type, module.name, typeComponent, component,
+                                    AssetDatabase.Refresh));
                             }
                         }
                     }
@@ -275,10 +275,10 @@ namespace ZF.Setup.Installer
                     foreach (var module in dependencyModules)
                     {
                         var dependencyModule = Installer.Modules.GetValueOrDefault(module.moduleId);
-                        bool hasModule =
-                            Installer.AddedComponent.GetValueOrDefault((dependencyModule.name, module.typeComponent));
+                        if (dependencyModule == null) continue;
+                        bool hasModule = Installer.AddedComponent.GetValueOrDefault((dependencyModule.name, module.typeComponent));
                         GUILayout.Box(
-                            $"{dependencyModule.name}[{module.typeComponent.ToString().Substring(0, 3).ToUpper()}]",
+                            $"{dependencyModule.name}\n[{module.typeComponent.ToString().Substring(0, 3).ToUpper()}]",
                             new GUIStyle(GUI.skin.box)
                                 { normal = { textColor = hasModule ? Color.green : Color.red } });
                     }
@@ -403,6 +403,42 @@ namespace ZF.Setup.Installer
             }
 
             EditorGUILayout.EndScrollView();
+        }
+
+        #endregion
+        
+        #region 协程
+
+        // 1. 保存当前执行的协程
+        private static IEnumerator _activeCoroutine;
+        
+        // 2. 协程更新回调
+        private static void UpdateCoroutine()
+        {
+            if (_activeCoroutine != null && _activeCoroutine.MoveNext())
+            {
+                // 协程继续执行
+                return;
+            }
+            
+            // 3. 协程结束，清理资源
+            _activeCoroutine = null;
+            EditorApplication.update -= UpdateCoroutine;
+        }
+        
+        // 4. 自定义的"启动协程"方法（不是Unity内置的！）
+        private static void RunCoroutine(IEnumerator coroutine)
+        {
+            // 停止当前协程（可选，根据需求决定）
+            if (_activeCoroutine != null)
+            {
+                _activeCoroutine = null;
+                EditorApplication.update -= UpdateCoroutine;
+            }
+            
+            // 5. 启动新协程
+            _activeCoroutine = coroutine;
+            EditorApplication.update += UpdateCoroutine;
         }
 
         #endregion

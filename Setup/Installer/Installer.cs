@@ -1,10 +1,10 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using System.IO;
 using System.IO.Compression;
 using System.Runtime.Serialization.Formatters.Binary;
-using System.Threading.Tasks;
 using System.Linq;
 
 namespace ZF.Setup.Installer
@@ -277,7 +277,7 @@ namespace ZF.Setup.Installer
 
         #region 安装与卸载
 
-        public static async Task Install(ModuleType type, string moduleName, ModuleTypeComponent typeComponent,
+        public static IEnumerator Install(ModuleType type, string moduleName, ModuleTypeComponent typeComponent,
             ModuleComponent component, Action onComplete = null)
         {
             LogInfo($"开始安装模块：{moduleName} - 类型：{type} - 组件：{typeComponent}");
@@ -298,7 +298,7 @@ namespace ZF.Setup.Installer
                                     out var dependencyComponent))
                             {
                                 var moduleType = _moduleTypes.GetValueOrDefault(dependencyModule.id);
-                                await Install(moduleType, dependencyModule.name, module.typeComponent,
+                                yield return Install(moduleType, dependencyModule.name, module.typeComponent,
                                     dependencyComponent);
                             }
                         }
@@ -314,7 +314,7 @@ namespace ZF.Setup.Installer
                         if (!dependencyUrlAdded)
                         {
                             LogInfo($"\t添加依赖的URL：{url}");
-                            await InstallerHelper.AddGitPackage(url);
+                            yield return InstallerHelper.AddGitPackage(url);
                         }
                     }
                 }
@@ -328,7 +328,7 @@ namespace ZF.Setup.Installer
                         if (!addedRegistry)
                         {
                             LogInfo($"\t添加依赖的注册表：{registry}");
-                            await InstallerHelper.AddRegistry(registry);
+                            yield return InstallerHelper.AddRegistry(registry);
                         }
                     }
                 }
@@ -342,7 +342,7 @@ namespace ZF.Setup.Installer
                         if (!addedScopedRegistry)
                         {
                             LogInfo($"\t添加作用域注册表：{scopedRegistry.name}");
-                            await InstallerHelper.AddScopedRegistry(scopedRegistry.name, scopedRegistry.url,
+                            yield return InstallerHelper.AddScopedRegistry(scopedRegistry.name, scopedRegistry.url,
                                 scopedRegistry.scopes);
                         }
                     }
@@ -358,7 +358,7 @@ namespace ZF.Setup.Installer
                         {
                             if (_components.TryGetValue((moduleName, addTypeComponent), out var addComponent))
                             {
-                                await Install(type, moduleName, addTypeComponent, addComponent);
+                                yield return Install(type, moduleName, addTypeComponent, addComponent);
                             }
                         }
                     }
@@ -381,12 +381,12 @@ namespace ZF.Setup.Installer
             }
         }
 
-        public static async Task InstallAll(Action<int, int> onProgress = null, Action onComplete = null)
+        public static IEnumerator InstallAll(Action<int, int> onProgress = null, Action onComplete = null)
         {
             if (_config == null || _config.modules == null)
             {
                 onComplete?.Invoke();
-                return;
+                yield break;
             }
 
             int totalModules = 0;
@@ -412,7 +412,7 @@ namespace ZF.Setup.Installer
                         bool isAdded = _addedComponent.GetValueOrDefault((module.name, typeComponent));
                         if (!isAdded)
                         {
-                            await Install(type, module.name, typeComponent, component);
+                            yield return Install(type, module.name, typeComponent, component);
                             installedModules++;
                             onProgress?.Invoke(installedModules, totalModules);
                         }
