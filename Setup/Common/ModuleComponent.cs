@@ -49,9 +49,9 @@ namespace ZF.Setup
 #endif
         public List<string> dependencyRegistries;
         
-        public bool dependOnScopedRegistries;
+        public bool dependOnScopes;
 #if ODIN_INSPECTOR
-        [ShowIf("dependOnScopedRegistries")]
+        [ShowIf("dependOnScopes")]
 #endif
         public List<ScopedRegistry> scopedRegistries;
             

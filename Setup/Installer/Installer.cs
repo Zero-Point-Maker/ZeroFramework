@@ -297,7 +297,7 @@ namespace ZF.Setup.Installer
                 if (component.dependOnModule) await InstallDependencyModules(component);
                 if (component.dependOnURL) await InstallDependencyURL(component);
                 if (component.dependOnRegistry) await InstallRegistries(component);
-                if (component.dependOnScopedRegistries) await InstallScopes(component);
+                if (component.dependOnScopes) await InstallScopes(component);
                 await InstallPreComponent(type, moduleName, typeComponent);
 
                 // 安装组件

@@ -257,7 +257,7 @@ namespace ZF.Setup.Installer
                     if (component.dependOnModule) DrawSubDependencyModule(component.dependencyModules);
                     if (component.dependOnURL) DrawSubDependencyURL(component.dependencyURL);
                     if (component.dependOnRegistry) DrawSubRegistries(component.dependencyRegistries);
-                    if (component.dependOnScopedRegistries) DrawSubScopedRegistries(component.scopedRegistries);
+                    if (component.dependOnScopes) DrawSubScopedRegistries(component.scopedRegistries);
                     DrawSubPath(component.path);
 
                     EditorGUI.indentLevel--;
